@@ -17,7 +17,7 @@
 
 | Name | Type | Description |
 | --- | --- | --- |
-| rule.url | <code>string</code> \| <code>RegExp</code> \| <code>Array.&lt;string&gt;</code> | 原请求地址，若传入的参数未携带search参数，则匹配时也会忽略search参数；正则匹配时不会忽略search参数; 若域名和location域名相同，会忽略域名 |
+| rule.url | <code>string</code> \| <code>RegExp</code> \| <code>Array.&lt;string&gt;</code> | 原请求地址，若传入的参数未携带search参数，则匹配时也会忽略search参数；正则匹配时不会忽略search参数; 若域名和location域名相同，会忽略域名；字符串时支持结尾统配符* |
 | [rule.before] | [<code>overrideRequest</code>](#overrideRequest) | 发送前的处理 |
 | [rule.after] | [<code>overrideResponse</code>](#overrideResponse) | 对返回值的处理, 默认情况下rule.after仅在readyState===4的时候调用，可通过rule.callAfterEveryState修改 |
 | [rule.callAfterEveryState] | <code>boolean</code> | 每次readystatechange变更时都调用rule.after去修改res |
@@ -62,7 +62,7 @@ hijackAjax({
 
 | Name | Type | Description |
 | --- | --- | --- |
-| req.url | <code>string</code> | 原有url，字符串，不包含search参数, 支持通配符* |
+| req.url | <code>string</code> | 原有url，字符串，不包含search参数 |
 | req.method | <code>string</code> | 原有method |
 | req.headers | <code>Object</code> | 原有headers，键值对象，不会传入null |
 | req.search | <code>Object</code> | 原有search参数，键值对象，不会传入null |
@@ -88,11 +88,11 @@ hijackAjax({
 
 | Name | Type | Description |
 | --- | --- | --- |
-| res.headers | <code>Object</code> | 原有headers，键值对象，不会传入null |
-| res.status | <code>number</code> |  |
-| res.statusText | <code>string</code> |  |
-| res.responseType | <code>string</code> |  |
-| res.responseURL | <code>string</code> |  |
-| res.response | <code>string</code> |  |
-| res.responseText | <code>string</code> |  |
-| res.responseXML | <code>string</code> |  |
+| res.headers | <code>Object</code> | 原有headers，键值对象，永远不会传入null |
+| res.status | <code>number</code> | 原有status |
+| res.statusText | <code>string</code> | 原有statusText |
+| res.responseType | <code>string</code> | 原有responseType |
+| res.responseURL | <code>string</code> | 原有responseURL |
+| res.response | <code>string</code> | 原有response |
+| res.responseText | <code>string</code> | 原有responseText |
+| res.responseXML | <code>string</code> |  原有responseXML|
