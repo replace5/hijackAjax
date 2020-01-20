@@ -270,7 +270,7 @@
 							res.responseXML = hijacker.descriptors.responseXML.get.call(this);
 						}
 
-						if (rule.after) {
+						if (rule.after && (rule.callAfterEveryState || this.readyState === this.DONE)) {
 							res = hijacker.res = rule.after(res);
 						}
 
