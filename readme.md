@@ -28,6 +28,9 @@ hijackAjax({
 	url: '/article/list',
 	before: req => {
 		req.url = 'recommend/list';
+		let data = JSON.parse(req.data);
+		data.name = "test";
+		req.data = JSON.stringify(data)
 		return req;
 	},
 	after: res => {

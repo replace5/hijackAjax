@@ -54,6 +54,9 @@
 	 * 	url: '/article/list',
 	 * 	before: req => {
 	 * 		req.url = 'recommend/list';
+	 * 		let data = JSON.parse(req.data);
+	 * 		data.name = "test";
+	 * 		req.data = JSON.stringify(data)
 	 * 		return req;
 	 * 	},
 	 * 	after: res => {
@@ -154,7 +157,7 @@
 		var arr = [];
 		for (var i in headers) {
 			if (headers.hasOwnProperty(i)) {
-				arr.push([i, hijacker.res.headers[i]].join(': '))
+				arr.push([i, headers[i]].join(': '))
 			}
 		}
 		return arr.join('\r\n');
@@ -164,8 +167,8 @@
 		var hijacker = originXhr.__hijack_xhr___ = {
 			req: {
 				method: openArgs[0].toUpperCase(),
-				url: parseUrl(url),
-				search: parseSearch(url),
+				url: parseUrl(openArgs[1]),
+				search: parseSearch(openArgs[1]),
 				async: openArgs[2] === false ? false : true,
 				user: openArgs[3],
 				password: openArgs[4],
@@ -186,7 +189,11 @@
 				responseXML: originXhr.responseXML
 			},
 			xhr: originXhr,
-			descriptors: Object.getOwnPropertyDescriptors(Object.getPrototypeOf(originXhr)),
+			descriptors:Object.assign(
+				Object.getOwnPropertyDescriptors(Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(originXhr)))),
+				Object.getOwnPropertyDescriptors(Object.getPrototypeOf(Object.getPrototypeOf(originXhr))),
+				Object.getOwnPropertyDescriptors(Object.getPrototypeOf(originXhr))
+			),
 			event: {
 				addEventListener: originXhr.addEventListener.bind(originXhr),
 				removeEventListener: originXhr.removeEventListener.bind(originXhr),
@@ -204,7 +211,9 @@
 				},
 				set: function(value) {
 					hijacker.req.withCredentials = value;
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			timeout: {
 				get: function() {
@@ -212,17 +221,23 @@
 				},
 				set: function(value) {
 					hijacker.req.timeout = value;
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			setRequestHeader: {
 				value: function(header, value) {
 					hijacker.req.headers[header] = value;
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			overrideMimeType: {
 				value: function(value) {
 					hijacker.req.mimeType = value
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			send: {
 				value: function(data) {
@@ -230,7 +245,7 @@
 					req.data = data;
 					
 					if (rule.before) {
-						req = hijacker.req = rule.before(req);
+						req = hijacker.req = rule.before(req) || hijacker.req;
 					}
 
 					if (req.withCredentials) {
@@ -245,16 +260,16 @@
 						hijacker.descriptors.overrideMimeType.value.call(originXhr, req.mimeType);
 					}
 					
-					hijacker.descriptors.open.value.call(originXhr, req.method, req.url + '?' + stringifySearch(req.search), req.async, req.user, req.password);
+					originOpen.call(originXhr, req.method, req.url + '?' + stringifySearch(req.search), req.async, req.user, req.password);
 					
 					for (var header in req.headers) {
-						if (req.headers.hasOwnProperty(i)) {
+						if (req.headers.hasOwnProperty(header)) {
 							hijacker.descriptors.setRequestHeader.value.call(originXhr, header, req.headers[header]);
 						}
 					}
 
 					// 状态变更时，挂载response数据
-					function onreadystatechange(args, callback) {
+					function readystatechangeFn(args) {
 						var res = hijacker.res;
 						if (this.readyState === this.HEADERS_RECEIVED) {
 							var headerString = hijacker.descriptors.getAllResponseHeaders.value.call(this);
@@ -271,32 +286,26 @@
 						}
 
 						if (rule.after && (rule.callAfterEveryState || this.readyState === this.DONE)) {
-							res = hijacker.res = rule.after(res);
+							res = hijacker.res = rule.after(res) || hijacker.res;
 						}
 
-						Object.defineProperties(this, {
-							'status': {
-								value: res.status
-							},
-							'statusText': {
-								value: res.statusText
-							},
-							'responseType': {
-								value: res.responseType
-							},
-							'response': {
-								value: res.response
-							},
-							'responseText': {
-								value: res.responseText
-							},
-							'responseXML': {
-								value: res.responseXML
-							}
-						})
+						if (typeof hijacker.event.onreadystatechange === 'function') {
+							hijacker.event.onreadystatechange.apply(this, args);
+						}
+						triggerListeners.call(this, 'readystatechange', args);
 
-						if (typeof callback === 'function') {
-							callback.apply(this, args);
+						if (this.status === this.DONE) {
+							if (typeof hijacker.event.onload === 'function') {
+								hijacker.event.onload.apply(this, args);
+							}
+							triggerListeners.call(this, 'load', args);
+						}
+
+						if (this.status === this.DONE || this.status === this.UNSET) {
+							if (typeof hijacker.event.onloadend === 'function') {
+								hijacker.event.onloadend.apply(this, args);
+							}
+							triggerListeners.call(this, 'loadend', args);
 						}
 					}
 
@@ -316,35 +325,22 @@
 						}
 					}
 
-					hijacker.descriptors.onreadystatechange.set.call(originXhr, function() {
-						onreadystatechange.call(this, arguments, hijacker.event.onreadystatechange);
-					});
-					hijacker.descriptors.onload.set.call(originXhr, function() {
-						onreadystatechange.call(this, arguments, hijacker.event.onload);
-					});
-					hijacker.descriptors.onloadend.set.call(originXhr, function() {
-						onreadystatechange.call(this, arguments, hijacker.event.onloadend);
-					})
-					hijacker.addEventListener('readystatechange', function() {
-						onreadystatechange.call(this, arguments, triggerListeners.call(this, 'readystatechange', arguments));
-					})
-					hijacker.addEventListener('load', function() {
-						onreadystatechange.call(this, arguments, triggerListeners.call(this, 'load', arguments));
-					})
-					hijacker.addEventListener('loadend', function() {
-						onreadystatechange.call(this, arguments, triggerListeners.call(this, 'loadend', arguments));
-					})
+					hijacker.descriptors.onreadystatechange.set.call(originXhr, readystatechangeFn.bind(this));
 
 					hijacker.descriptors.send.value.call(originXhr, req.data);
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			onreadystatechange: {
 				get: function() {
 					return hijacker.event.onreadystatechange
 				},
-				set: function() {
+				set: function(value) {
 					hijacker.event.onreadystatechange = value
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			onload: {
 				get: function() {
@@ -352,7 +348,9 @@
 				},
 				set: function(value) {
 					hijacker.event.onload = value
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			onloadend: {
 				get: function() {
@@ -360,7 +358,9 @@
 				},
 				set: function(value) {
 					hijacker.event.onloadend = value
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			// open之前的addEventListener是无法劫持的
 			addEventListener: {
@@ -370,7 +370,9 @@
 					} else {
 						hijacker.event.addEventListener.apply(this, arguments);
 					}
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			removeEventListener: {
 				value: function(type, listener) {
@@ -384,36 +386,86 @@
 					} else {
 						hijacker.event.removeEventListener.apply(this, arguments);
 					}
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			getAllResponseHeaders: {
 				value: function() {
 					return stringifyHeader(hijacker.res.headers);
-				}
+				},
+				configurable: true,
+				enumerable: false
 			},
 			getResponseHeader: {
 				value: function(header) {
 					return hijacker.res.headers[header];
-				}
+				},
+				configurable: true,
+				enumerable: false
+			},
+			status: {
+				get:function() {
+					return hijacker.res.status;
+				},
+				configurable: true,
+				enumerable: false
+			},
+			statusText: {
+				get:function() {
+					return hijacker.res.statusText;
+				},
+				configurable: true,
+				enumerable: false
+			},
+			responseType: {
+				get:function() {
+					return hijacker.res.responseType;
+				},
+				configurable: true,
+				enumerable: false
+			},
+			response: {
+				get:function() {
+					return hijacker.res.response;
+				},
+				configurable: true,
+				enumerable: false
+			},
+			responseText: {
+				get:function() {
+					return hijacker.res.responseText;
+				},
+				configurable: true,
+				enumerable: false
+			},
+			responseXML: {
+				get:function() {
+					return hijacker.res.responseXML;
+				},
+				configurable: true,
+				enumerable: false
 			}
-		})
+		});
 	}
 
+	var originOpen = XMLHttpRequest.prototype.open
 	XMLHttpRequest.prototype.open = function(method, url, async) {
-		var hit = false
+		var hitRule;
 		for (var i = 0; i < overrideRules.length; i++) {
 			var rule = overrideRules[i];
 			if (matchRule(url, rule.url)) {
-				hit = true
+				hitRule = rule
 				break
 			}
 		}
 		
-		if (hit) {
+		if (hitRule) {
 			var __hijack_xhr___ = this.__hijack_xhr___;
-			hijack(this, arguments);
+			hijack(this, hitRule, arguments);
+		} else {
+			originOpen.apply(this, arguments);
 		}
-
 	}
 })()
 
